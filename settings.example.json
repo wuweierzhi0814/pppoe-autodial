@@ -1,0 +1,43 @@
+{
+  "_comment": "Copy this over %ProgramData%\\PPPoEAutoDial\\settings.json to override the built-in defaults. Every key is optional; anything omitted keeps the built-in value. Changes take effect on the next run - no reinstall needed.",
+
+  "ConnectionName": "Broadband Connection",
+
+  "_timing": "wait this long after being woken up before the first dial attempt",
+  "FirstAttemptDelaySeconds": 20,
+
+  "_per_run_bounds": "how long one process may live, and how long it may keep trying",
+  "MaxRunSeconds": 1500,
+  "RetryWindowSeconds": 480,
+  "MaxAttemptsPerRun": 10,
+
+  "_pacing": "never dial faster than Min, never wait longer than Max between attempts",
+  "MinSecondsBetweenAttempts": 20,
+  "MaxSecondsBetweenAttempts": 60,
+
+  "_first_failure_pause": "attempt 1 still fires after FirstAttemptDelaySeconds; this is the gap AFTER that first failure. Cadence becomes 20s -> 180s -> 40s -> 60s -> 60s. Raise it if your provider needs longer to release the old session (RAS 628 on every early attempt).",
+  "AfterFirstFailureWaitSeconds": 180,
+
+  "_success": "session continuously up for this long counts as healthy, run ends",
+  "StableSeconds": 600,
+
+  "_lock": "time-based self-lock, plus immediate lock on these RAS error codes (651 = port wedged, 756 = dial already in progress)",
+  "LockAfterFailingSeconds": 1800,
+  "LockOnErrorCodes": [651, 756],
+
+  "_policy": "1 = if the machine already reaches the internet by another path (USB tethering, wifi), do not dial",
+  "DialOnlyWhenNoInternet": 1,
+  "OtherPathRecheckSeconds": 30,
+
+  "_account": "broadband account name for the 'rasdial <entry> <account>' form. Empty = detect it from the RasMan 20267 event log. Only the account name is read here - the password is never touched.",
+  "DialWithAccountName": "",
+
+  "_probes": "any single successful TCP connect counts as reachable",
+  "ProbeTimeoutMs": 2000,
+  "ProbeIntervalSeconds": 5,
+  "ProbeEndpoints": ["223.5.5.5:53", "119.29.29.29:53", "180.76.76.76:53"],
+
+  "_dial": "rasdial is killed after this long. The rasphone dialog gets a much shorter 12 s leash, because it only ever finishes quickly when the port is actually ready - otherwise it just parks a dialog that can never succeed.",
+  "DialTimeoutMs": 90000,
+  "LogRotateBytes": 524288
+}

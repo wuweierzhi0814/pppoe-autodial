@@ -1,0 +1,28 @@
+# ---- line endings ----
+# Store everything as LF inside the repository, but check out Windows-native CRLF for
+# the files that actually need it.
+#
+# The .bat installers are the important case: cmd.exe is far less forgiving than
+# PowerShell about a bare LF, and a broken install.bat is the first thing a new user
+# would hit. *.ps1 gets CRLF too, purely because that is what Windows users expect to
+# see when they open the file in an editor.
+#
+# *.md / *.json stay LF so the diffs stay readable on GitHub and the files behave the
+# same on every platform.
+
+* text=auto
+
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+
+*.md   text eol=lf
+*.json text eol=lf
+.gitignore text eol=lf
+LICENSE    text eol=lf
+
+# Binary safety net
+*.png  binary
+*.jpg  binary
+*.zip  binary
+*.exe  binary

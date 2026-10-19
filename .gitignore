@@ -1,0 +1,15 @@
+# ---- runtime state and logs, never commit these ----
+*.log
+*.log.old
+*.heartbeat
+state.json
+stop.flag
+settings.json
+install-result*.txt
+emergency-stop-result.txt
+
+# ---- local scratch ----
+*.tmp
+*.bak
+Thumbs.db
+desktop.ini
