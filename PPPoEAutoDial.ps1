@@ -483,6 +483,10 @@ function Invoke-DialOnce {
     $psi.Arguments              = $argLine
     $psi.UseShellExecute        = $false
     $psi.CreateNoWindow         = $true
+    # Best effort at keeping the rasphone dialog off the screen. A GUI program draws its
+    # own window and may simply ignore this, but where it is honoured the window never
+    # appears at all - which is the whole complaint this line exists to fix.
+    $psi.WindowStyle            = [System.Diagnostics.ProcessWindowStyle]::Hidden
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError  = $true
 
@@ -804,22 +808,17 @@ try {
         }
 
         # ---- which form to dial with ----
-        # Ordered by measured outcome, not by preference: the rasphone dialog is the only
-        # form that has ever brought the link up (2026-10-19 09:59:26), so it leads. One
-        # plain rasdial stays in as a quick silent fallback, then we return to rasphone.
-        # Once any form succeeds it is pinned for the rest of the run.
+        # SILENCE FIRST. "rasdial <entry> <account>" puts no window on screen at all, so if
+        # it works the user never sees anything. It has never been observed working on this
+        # line - but it has also never been tried WITH the account supplied, because that
+        # test never ran. So it gets attempt 1, and the proven rasphone dialog is the
+        # immediate fallback for everything after that.
+        # Whatever wins is pinned for the rest of the run, so a silent success keeps the
+        # whole run silent instead of falling back to the window on the next drop.
         if ($preferredForm) {
             $form = $preferredForm
-        } elseif ($attempts -le 1) {
-            # Proven 2026-10-19: the rasphone dialog is the ONLY form that has ever
-            # established a session. It now goes FIRST, so the link comes back roughly
-            # 25 s after the trigger instead of after a doomed rasdial attempt (3 s) plus
-            # the long first-failure pause (180 s) - which is what cost 3.5 minutes today.
-            $form = 'rasphone'
-        } elseif ($attempts -eq 2) {
-            # Quick silent fallback. It fails in a few seconds, and keeping it in the
-            # rotation preserves the recorded comparison between the two mechanisms.
-            $form = 'rasdial'
+        } elseif ($attempts -le 1 -and $DialAccount) {
+            $form = 'rasdial-account'
         } else {
             $form = 'rasphone'
         }
