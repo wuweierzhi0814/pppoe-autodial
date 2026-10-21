@@ -72,8 +72,18 @@ $MutexName    = 'Local\PPPoEAutoDial'
 $Cfg = @{
     ConnectionName            = ''          # PPPoE entry name; the installer fills this in
 
-    # --- timing of the very first dial (task starts at logon) ---
-    FirstAttemptDelaySeconds  = 20         # -> first dial ~20 s after logon
+    # --- timing of the very first dial ---
+    FirstAttemptDelaySeconds  = 20         # -> first dial ~20 s after a fresh boot
+    # The 20 s hold exists for exactly one case: a fresh boot, where the desktop, the
+    # network stack and the PPPoE port are all still settling. After a resume from sleep,
+    # or after a plain link drop, there is nothing to wait for - the user is staring at a
+    # dead connection and wants it back. So the hold is skipped in those cases.
+    # Uptime separates them without reading the event log (which the background task
+    # cannot reliably read): a fresh boot is minutes old, a resume is hours or days old.
+    # TickCount64 counts time spent asleep, so sleeping does NOT make a long-running
+    # machine look freshly booted.
+    HoldOnlyOnFreshBoot       = 1
+    FreshBootWindowMinutes    = 5
 
     # --- per-run bounds ---
     MaxRunSeconds             = 1500       # 25 min - process hard lifetime
@@ -231,6 +241,21 @@ public static class RasHelper
             catch { }
         }
         return res;
+    }
+
+    // How long has this machine been up, in minutes? Used to tell a fresh boot (hold the
+    // first dial back so the desktop can settle) from a resume or a link drop (dial now).
+    // GetTickCount64 rather than Environment.TickCount64: the latter does not exist in
+    // .NET Framework, which is what Windows PowerShell 5.1 runs on - calling it silently
+    // yields nothing and the check would always look like a fresh boot.
+    // GetTickCount64 also counts time spent asleep, so a machine that slept for a day
+    // does not look freshly booted when it wakes.
+    [DllImport("kernel32.dll")]
+    private static extern ulong GetTickCount64();
+
+    public static long UptimeMinutes()
+    {
+        try { return (long)(GetTickCount64() / 60000UL); } catch { return -1; }
     }
 
     // A heartbeat from a real background thread. It keeps writing even when the main
@@ -619,6 +644,30 @@ try {
     $DialAccount = $null
     $preferredForm = $null
 
+    # ---- how long to hold before the very first attempt? ----
+    # A fresh boot needs the hold (everything is still settling). A resume from sleep or a
+    # link drop does not - dial immediately.
+    $uptimeMin  = -1
+    if ($NativeOk) {
+        try { $uptimeMin = [long][RasHelper]::UptimeMinutes() } catch { $uptimeMin = -1 }
+    }
+    $firstDelay = [int]$Cfg.FirstAttemptDelaySeconds
+    $holdReason = 'holding: fresh boot, letting the desktop settle'
+    if ([int]$Cfg.HoldOnlyOnFreshBoot -eq 1) {
+        if ($uptimeMin -lt 0) {
+            # Uptime unknown: favour getting the link back quickly rather than waiting for
+            # a settle that may not be needed.
+            $firstDelay = 0
+            $holdReason = 'dialing immediately: uptime unknown'
+        } elseif ($uptimeMin -ge [int]$Cfg.FreshBootWindowMinutes) {
+            $firstDelay = 0
+            $holdReason = 'dialing immediately: not a fresh boot'
+        }
+    } elseif ($firstDelay -eq 0) {
+        $holdReason = 'dialing immediately: hold disabled in settings'
+    }
+    Write-Log 'INFO' ('first attempt in {0}s (system up {1} min -> {2})' -f $firstDelay, $uptimeMin, $holdReason)
+
     Write-Log 'START' ('run begin (DryRun={0}) limits: firstDial={1}s run<={2}s retryWindow={3}s attempts<={4} gap={5}-{6}s afterFirstFail={9}s stable={7}s lockAfterFailing={8}s' -f `
         [bool]$DryRun, $Cfg.FirstAttemptDelaySeconds, $runLimit, $Cfg.RetryWindowSeconds, $Cfg.MaxAttemptsPerRun, `
         $Cfg.MinSecondsBetweenAttempts, $Cfg.MaxSecondsBetweenAttempts, $Cfg.StableSeconds, $Cfg.LockAfterFailingSeconds, `
@@ -640,14 +689,14 @@ try {
             Write-Log 'STOP' 'stop.flag detected; exiting'
             break
         }
-        # ---- deliberate hold before the very first attempt ----
+        # ---- deliberate hold before the very first attempt (fresh boot only) ----
         $elapsed = ((Get-Date) - $started).TotalSeconds
-        if ($elapsed -lt [int]$Cfg.FirstAttemptDelaySeconds) {
+        if ($firstDelay -gt 0 -and $elapsed -lt $firstDelay) {
             if (-not $delayLogged) {
-                Write-Log 'INFO' ('holding {0}s before the first connection attempt' -f $Cfg.FirstAttemptDelaySeconds)
+                Write-Log 'INFO' ('holding {0}s before the first connection attempt' -f $firstDelay)
                 $delayLogged = $true
             }
-            $nap = [int]([math]::Min([int]$Cfg.ProbeIntervalSeconds, [int]$Cfg.FirstAttemptDelaySeconds - $elapsed))
+            $nap = [int]([math]::Min([int]$Cfg.ProbeIntervalSeconds, $firstDelay - $elapsed))
             if ($nap -lt 1) { $nap = 1 }
             Start-Sleep -Seconds $nap
             continue
