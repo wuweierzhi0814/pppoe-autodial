@@ -137,7 +137,7 @@ Windows 拨 PPPoE 有好几条路，它们**看起来一样，实际差别很大
 
 ---
 
-## 日志在哪
+## 日志位置
 
 ```
 C:\ProgramData\PPPoEAutoDial\autodial.log
@@ -175,7 +175,7 @@ C:\ProgramData\PPPoEAutoDial\autodial.log
 powershell -File "C:\ProgramData\PPPoEAutoDial\Manage-PPPoEAutoDial.ps1" -Panic
 ```
 
-### 彻底卸载
+### 卸载
 
 双击 `uninstall.bat`，或者在管理员 PowerShell 里：
 
